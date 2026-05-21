@@ -29,6 +29,7 @@ from sglang.srt.layers.vocab_parallel_embedding import (
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, PPProxyTensors
 from sglang.srt.model_loader.weight_utils import default_weight_loader
 from sglang.srt.models.deepseek_v2 import DeepseekV2AttentionMLA, DeepseekV2MLP
+from sglang.srt.speculative.dtype_policy import align_draft_input_embeds
 from sglang.srt.utils import BumpAllocator, add_prefix
 
 logger = logging.getLogger(__name__)
@@ -242,6 +243,7 @@ class Eagle3MLAModel(nn.Module):
             embeds = input_embeds
 
         hidden_states = forward_batch.spec_info.hidden_states
+        embeds = align_draft_input_embeds(embeds, hidden_states)
         if hidden_states.shape[-1] != embeds.shape[-1]:
             hidden_states = self.fc(hidden_states)
 

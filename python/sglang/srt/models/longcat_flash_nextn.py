@@ -70,6 +70,7 @@ from sglang.srt.model_loader.utils import should_deepgemm_weight_requant_ue8m0
 from sglang.srt.model_loader.weight_utils import default_weight_loader
 from sglang.srt.models.deepseek_v2 import DeepseekV2AttentionMLA
 from sglang.srt.models.longcat_flash import LongcatFlashForCausalLM, LongcatFlashMLP
+from sglang.srt.speculative.dtype_policy import align_draft_input_embeds
 from sglang.srt.utils import (
     BumpAllocator,
     add_prefix,
@@ -255,12 +256,14 @@ class LongcatFlashModelNextN(nn.Module):
         else:
             hidden_states = input_embeds
 
+        spec_hidden_states = forward_batch.spec_info.hidden_states
+        hidden_states = align_draft_input_embeds(hidden_states, spec_hidden_states)
         if hidden_states.shape[0] > 0:
             hidden_states, _ = self.eh_proj(
                 torch.cat(
                     (
                         self.enorm(hidden_states),
-                        self.hnorm(forward_batch.spec_info.hidden_states),
+                        self.hnorm(spec_hidden_states),
                     ),
                     dim=-1,
                 )

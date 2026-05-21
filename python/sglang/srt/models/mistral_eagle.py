@@ -48,6 +48,7 @@ from sglang.srt.layers.vocab_parallel_embedding import VocabParallelEmbedding
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, PPProxyTensors
 from sglang.srt.models.llama import LlamaDecoderLayer, LlamaForCausalLM
 from sglang.srt.models.llama_eagle import LlamaForCausalLMEagle
+from sglang.srt.speculative.dtype_policy import align_draft_input_embeds
 from sglang.srt.utils import add_prefix
 
 logger = logging.getLogger(__name__)
@@ -113,9 +114,11 @@ class MistralEagleModel(nn.Module):
         # EAGLE fusion: concat input embedding with target's previous hidden
         # state, project back to hidden_size before going through the draft's
         # transformer layers.
+        spec_hidden_states = forward_batch.spec_info.hidden_states
+        hidden_states = align_draft_input_embeds(hidden_states, spec_hidden_states)
         hidden_states, _ = self.fc(
             torch.cat(
-                (hidden_states, forward_batch.spec_info.hidden_states),
+                (hidden_states, spec_hidden_states),
                 dim=-1,
             )
         )

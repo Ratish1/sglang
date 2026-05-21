@@ -31,6 +31,7 @@ from sglang.srt.layers.vocab_parallel_embedding import ParallelLMHead
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch
 from sglang.srt.models.qwen3_next import Qwen3NextForCausalLM, Qwen3NextModel
 from sglang.srt.server_args import get_global_server_args
+from sglang.srt.speculative.dtype_policy import align_draft_input_embeds
 from sglang.srt.utils import add_prefix, is_npu
 
 logger = logging.getLogger(__name__)
@@ -99,6 +100,7 @@ class Qwen3NextForCausalLMMTP(Qwen3NextForCausalLM):
             input_embeds = self.model.embed_tokens(input_ids)
 
         hidden_states = forward_batch.spec_info.hidden_states
+        input_embeds = align_draft_input_embeds(input_embeds, hidden_states)
         # Some idle batch has 0 batch size. GemmaRMSNorm.forward would fail due to bs=0.
         if not forward_batch.forward_mode.is_idle():
             input_embeds = self.pre_fc_norm_embedding(input_embeds)

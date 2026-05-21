@@ -44,6 +44,7 @@ from sglang.srt.models.bailing_moe_linear import (
 )
 from sglang.srt.models.utils import WeightsMapper
 from sglang.srt.server_args import get_global_server_args
+from sglang.srt.speculative.dtype_policy import align_draft_input_embeds
 from sglang.srt.utils import BumpAllocator, add_prefix
 
 LoraConfig = None
@@ -128,16 +129,15 @@ class BailingMoEModelNextN(nn.Module):
         else:
             hidden_states = input_embeds
 
+        spec_hidden_states = forward_batch.spec_info.hidden_states
         if hidden_states.shape[0] > 0:
+            hidden_states = align_draft_input_embeds(hidden_states, spec_hidden_states)
+            norm_hidden_states = spec_hidden_states.to(self.hnorm.weight.dtype)
             hidden_states, _ = self.eh_proj(
                 torch.cat(
                     (
                         self.enorm(hidden_states),
-                        self.hnorm(
-                            forward_batch.spec_info.hidden_states.to(
-                                self.hnorm.weight.dtype
-                            )
-                        ),
+                        self.hnorm(norm_hidden_states),
                     ),
                     dim=-1,
                 )

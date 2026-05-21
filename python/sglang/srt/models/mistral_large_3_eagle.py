@@ -16,6 +16,7 @@ from sglang.srt.layers.vocab_parallel_embedding import VocabParallelEmbedding
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, PPProxyTensors
 from sglang.srt.models.deepseek_v2 import DeepseekV2DecoderLayer, DeepseekV2Model
 from sglang.srt.models.mistral_large_3 import MistralLarge3ForCausalLM
+from sglang.srt.speculative.dtype_policy import align_draft_input_embeds
 from sglang.srt.utils import add_prefix
 
 
@@ -79,9 +80,9 @@ class MistralLarge3EagleModel(DeepseekV2Model):
     ) -> torch.Tensor:
         if input_embeds is None:
             input_embeds = self.embed_tokens(input_ids)
-        input_embeds, _ = self.fc(
-            torch.cat((input_embeds, forward_batch.spec_info.hidden_states), dim=-1)
-        )
+        spec_hidden_states = forward_batch.spec_info.hidden_states
+        input_embeds = align_draft_input_embeds(input_embeds, spec_hidden_states)
+        input_embeds, _ = self.fc(torch.cat((input_embeds, spec_hidden_states), dim=-1))
         output = super().forward(
             input_ids, positions, forward_batch, input_embeds, pp_proxy_tensors
         )

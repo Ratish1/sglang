@@ -19,6 +19,7 @@ from sglang.srt.layers.vocab_parallel_embedding import (
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch
 from sglang.srt.model_loader.weight_utils import default_weight_loader
 from sglang.srt.models.qwen2 import Qwen2DecoderLayer
+from sglang.srt.speculative.dtype_policy import align_draft_input_embeds
 
 
 class MiMoMultiTokenPredictorLayer(nn.Module):
@@ -57,13 +58,15 @@ class MiMoMultiTokenPredictorLayer(nn.Module):
             hidden_states = self.embed_tokens(input_ids)
         else:
             hidden_states = input_embeds
+        spec_hidden_states = forward_batch.spec_info.hidden_states
+        hidden_states = align_draft_input_embeds(hidden_states, spec_hidden_states)
         # masking inputs at position 0, as not needed by MTP
         hidden_states[positions == 0] = 0
 
         hidden_states = self.input_proj(
             torch.cat(
                 (
-                    self.hidden_layernorm(forward_batch.spec_info.hidden_states),
+                    self.hidden_layernorm(spec_hidden_states),
                     self.token_layernorm(hidden_states),
                 ),
                 dim=-1,

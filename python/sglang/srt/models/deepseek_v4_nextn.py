@@ -39,6 +39,7 @@ from sglang.srt.layers.vocab_parallel_embedding import (
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch
 from sglang.srt.models.deepseek_v4 import DeepseekV4DecoderLayer, DeepseekV4ForCausalLM
 from sglang.srt.server_args import get_global_server_args
+from sglang.srt.speculative.dtype_policy import align_draft_input_embeds
 from sglang.srt.utils import add_prefix
 
 logger = logging.getLogger(__name__)
@@ -145,12 +146,12 @@ class DeepseekV4ModelNextN(nn.Module):
         else:
             hidden_states = input_embeds
 
+        spec_hidden_states = forward_batch.spec_info.hidden_states
+        hidden_states = align_draft_input_embeds(hidden_states, spec_hidden_states)
         if hidden_states.shape[0] > 0:
             n_tokens = hidden_states.shape[0]
             d = self.config.hidden_size
-            hc_flat = forward_batch.spec_info.hidden_states.view(
-                n_tokens * self.hc_mult, d
-            )
+            hc_flat = spec_hidden_states.view(n_tokens * self.hc_mult, d)
             h_proj_out, _ = self.h_proj(self.hnorm(hc_flat))
             h_proj_hidden_states = h_proj_out.view(n_tokens, self.hc_mult, d)
 

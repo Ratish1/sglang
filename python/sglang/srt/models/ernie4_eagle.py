@@ -32,6 +32,7 @@ from sglang.srt.layers.vocab_parallel_embedding import (
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch
 from sglang.srt.model_loader.weight_utils import default_weight_loader
 from sglang.srt.models.ernie4 import Ernie4_5_ForCausalLM, Ernie4DecoderLayer
+from sglang.srt.speculative.dtype_policy import align_draft_input_embeds
 from sglang.srt.utils import add_prefix
 
 
@@ -75,6 +76,8 @@ class Ernie4ModelMTP(nn.Module):
             hidden_states = self.embed_tokens(input_ids)
         else:
             hidden_states = input_embeds
+        spec_hidden_states = forward_batch.spec_info.hidden_states
+        hidden_states = align_draft_input_embeds(hidden_states, spec_hidden_states)
         # masking inputs at position 0, as not needed by MTP
         hidden_states[positions == 0] = 0
 
@@ -82,7 +85,7 @@ class Ernie4ModelMTP(nn.Module):
             torch.cat(
                 (
                     self.mtp_emb_norm(hidden_states),
-                    self.mtp_hidden_norm(forward_batch.spec_info.hidden_states),
+                    self.mtp_hidden_norm(spec_hidden_states),
                 ),
                 dim=-1,
             )

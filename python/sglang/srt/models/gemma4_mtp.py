@@ -31,6 +31,7 @@ from sglang.srt.layers.quantization.base_config import QuantizationConfig
 from sglang.srt.mem_cache.memory_pool import KVCache
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch
 from sglang.srt.models.gemma4_causal import Gemma4ForCausalLM, Gemma4TextModel
+from sglang.srt.speculative.dtype_policy import align_draft_input_embeds
 from sglang.srt.speculative.frozen_kv_mtp_info import FrozenKVMTPContext
 from sglang.srt.utils import add_prefix
 
@@ -247,6 +248,7 @@ class Gemma4AssistantForCausalLM(Gemma4ForCausalLM):
                 "before model forward, leaving spec_info populated."
             )
         prev_hidden = forward_batch.spec_info.hidden_states
+        token_embed = align_draft_input_embeds(token_embed, prev_hidden)
         if token_embed.shape != prev_hidden.shape:
             raise ValueError(
                 "Frozen-KV MTP forward: token_embed and prev_hidden must have "

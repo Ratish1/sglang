@@ -39,6 +39,7 @@ from sglang.srt.model_executor.forward_batch_info import ForwardBatch, PPProxyTe
 from sglang.srt.model_loader.weight_utils import default_weight_loader
 from sglang.srt.models.llama import LlamaDecoderLayer, LlamaForCausalLM, LlamaMLP
 from sglang.srt.server_args import get_global_server_args
+from sglang.srt.speculative.dtype_policy import align_draft_input_embeds
 
 
 class LlamaDecoderLayer(LlamaDecoderLayer):
@@ -210,6 +211,7 @@ class LlamaModel(nn.Module):
             positions = forward_batch.mrope_positions
 
         hidden_states = forward_batch.spec_info.hidden_states
+        embeds = align_draft_input_embeds(embeds, hidden_states)
         if hidden_states.shape[-1] != embeds.shape[-1]:
             if self.fc_norm is not None:
                 chunks = hidden_states.chunk(self.num_aux_hidden_states, dim=-1)

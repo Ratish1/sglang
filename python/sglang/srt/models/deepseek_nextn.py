@@ -57,6 +57,7 @@ from sglang.srt.models.deepseek_common.utils import enable_nextn_moe_bf16_cast_t
 from sglang.srt.models.deepseek_v2 import DeepseekV2DecoderLayer, DeepseekV3ForCausalLM
 from sglang.srt.models.utils import WeightsMapper
 from sglang.srt.server_args import get_global_server_args
+from sglang.srt.speculative.dtype_policy import align_draft_input_embeds
 from sglang.srt.utils import BumpAllocator, add_prefix, is_cuda, is_npu
 
 logger = logging.getLogger(__name__)
@@ -174,17 +175,18 @@ class DeepseekModelNextN(nn.Module):
         else:
             hidden_states = input_embeds
 
+        spec_hidden_states = forward_batch.spec_info.hidden_states
+        hidden_states = align_draft_input_embeds(hidden_states, spec_hidden_states)
         if hidden_states.shape[0] > 0:
+            norm_hidden_states = (
+                spec_hidden_states
+                if self.rot_weight is None
+                else torch.matmul(spec_hidden_states, self.rot_weight)
+            )
             eh_input = torch.cat(
                 (
                     self.enorm(hidden_states),
-                    self.hnorm(
-                        forward_batch.spec_info.hidden_states
-                        if self.rot_weight is None
-                        else torch.matmul(
-                            forward_batch.spec_info.hidden_states, self.rot_weight
-                        )
-                    ),
+                    self.hnorm(norm_hidden_states),
                 ),
                 dim=-1,
             )

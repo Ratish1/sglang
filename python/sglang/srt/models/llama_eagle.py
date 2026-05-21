@@ -34,6 +34,7 @@ from sglang.srt.layers.vocab_parallel_embedding import (
 )
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, PPProxyTensors
 from sglang.srt.models.llama import LlamaDecoderLayer, LlamaForCausalLM
+from sglang.srt.speculative.dtype_policy import align_draft_input_embeds
 
 
 class LlamaDecoderLayer(LlamaDecoderLayer):
@@ -94,9 +95,9 @@ class LlamaModel(nn.Module):
         else:
             hidden_states = input_embeds
 
-        hidden_states = self.fc(
-            torch.cat((hidden_states, forward_batch.spec_info.hidden_states), dim=-1)
-        )
+        spec_hidden_states = forward_batch.spec_info.hidden_states
+        hidden_states = align_draft_input_embeds(hidden_states, spec_hidden_states)
+        hidden_states = self.fc(torch.cat((hidden_states, spec_hidden_states), dim=-1))
 
         residual = None
         for i in range(len(self.layers)):

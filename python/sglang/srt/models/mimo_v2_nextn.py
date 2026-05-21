@@ -47,6 +47,7 @@ from sglang.srt.models.mimo_v2 import (
     load_mimo_v2_qkv_proj_weight,
 )
 from sglang.srt.server_args import get_global_server_args
+from sglang.srt.speculative.dtype_policy import align_draft_input_embeds
 from sglang.srt.utils import add_prefix
 
 MiMoV2Config = None
@@ -204,12 +205,14 @@ class MiMoV2ModelNextN(nn.Module):
             hidden_states = self.embed_tokens(input_ids)
         else:
             hidden_states = input_embeds
+        spec_hidden_states = forward_batch.spec_info.hidden_states
+        hidden_states = align_draft_input_embeds(hidden_states, spec_hidden_states)
         if hidden_states.shape[0] > 0:
             hidden_states = self.eh_proj(
                 torch.cat(
                     (
                         self.enorm(hidden_states),
-                        self.hnorm(forward_batch.spec_info.hidden_states),
+                        self.hnorm(spec_hidden_states),
                     ),
                     dim=-1,
                 )

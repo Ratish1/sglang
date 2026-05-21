@@ -34,6 +34,7 @@ from sglang.srt.layers.vocab_parallel_embedding import (
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch
 from sglang.srt.models.glm4_moe import Glm4MoeDecoderLayer, Glm4MoeForCausalLM
 from sglang.srt.server_args import get_global_server_args
+from sglang.srt.speculative.dtype_policy import align_draft_input_embeds
 from sglang.srt.utils import add_prefix, is_npu
 
 logger = logging.getLogger(__name__)
@@ -90,12 +91,14 @@ class Glm4MoeModelNextN(nn.Module):
         else:
             hidden_states = input_embeds
 
+        spec_hidden_states = forward_batch.spec_info.hidden_states
+        hidden_states = align_draft_input_embeds(hidden_states, spec_hidden_states)
         if hidden_states.shape[0] > 0:
             hidden_states = self.eh_proj(
                 torch.cat(
                     (
                         self.enorm(hidden_states),
-                        self.hnorm(forward_batch.spec_info.hidden_states),
+                        self.hnorm(spec_hidden_states),
                     ),
                     dim=-1,
                 )

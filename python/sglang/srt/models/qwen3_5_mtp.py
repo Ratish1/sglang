@@ -33,6 +33,7 @@ from sglang.srt.model_executor.forward_batch_info import ForwardBatch
 from sglang.srt.model_loader.weight_utils import default_weight_loader
 from sglang.srt.models.qwen3_5 import Qwen3_5ForCausalLM
 from sglang.srt.server_args import get_global_server_args
+from sglang.srt.speculative.dtype_policy import align_draft_input_embeds
 from sglang.srt.utils import add_prefix, is_npu
 
 logger = logging.getLogger(__name__)
@@ -157,6 +158,7 @@ class Qwen3_5ForCausalLMMTP(nn.Module):
             input_embeds = self.model.embed_tokens(input_ids)
 
         hidden_states = forward_batch.spec_info.hidden_states
+        input_embeds = align_draft_input_embeds(input_embeds, hidden_states)
 
         if not forward_batch.forward_mode.is_idle():
             input_embeds = self.pre_fc_norm_embedding(input_embeds)

@@ -34,6 +34,7 @@ from sglang.srt.models.nemotron_h import (
     NemotronHMoEDecoderLayer,
 )
 from sglang.srt.server_args import get_global_server_args
+from sglang.srt.speculative.dtype_policy import align_draft_input_embeds
 from sglang.srt.utils import add_prefix
 
 
@@ -262,6 +263,7 @@ class NemotronHMultiTokenPredictor(nn.Module):
     ) -> torch.Tensor:
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings(input_ids)
+        inputs_embeds = align_draft_input_embeds(inputs_embeds, hidden_states)
 
         residual = None
 
