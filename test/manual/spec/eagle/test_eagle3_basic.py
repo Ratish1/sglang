@@ -23,15 +23,9 @@ class TestEagle3Basic(EagleServerBase):
     spec_topk = 1
     spec_tokens = 3
     extra_args = (
-        [
-            "--dtype=float16",
-            "--chunked-prefill-size",
-            1024,
-            "--attention-backend",
-            "aiter",
-        ]
+        ["--chunked-prefill-size", 1024, "--attention-backend", "aiter"]
         if _is_hip
-        else ["--dtype=float16", "--chunked-prefill-size", 1024]
+        else ["--chunked-prefill-size", 1024]
     )
 
     def test_mmlu(self):

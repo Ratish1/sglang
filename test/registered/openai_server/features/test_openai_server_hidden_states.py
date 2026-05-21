@@ -338,8 +338,6 @@ class TestOpenAIServerWithEAGLE3AndHiddenStatesEnabled(
                 128,
                 "--max-running-requests",
                 8,
-                "--dtype",
-                "float16",
                 "--enable-return-hidden-states",
             ],
         )

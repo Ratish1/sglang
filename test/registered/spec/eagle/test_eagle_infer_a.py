@@ -190,7 +190,6 @@ class TestEAGLE3Engine(TestEAGLEEngine):
         "speculative_num_draft_tokens": 64,
         "mem_fraction_static": 0.7,
         "cuda_graph_max_bs": 5,
-        "dtype": "float16",
     }
     NUM_CONFIGS = 1
     THRESHOLDS = {

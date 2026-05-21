@@ -38,7 +38,6 @@ class TestEagle3ServerBase(CustomTestCase, MatchedStopMixin):
         cls.base_url = DEFAULT_URL_FOR_TEST
         launch_args = [
             "--trust-remote-code",
-            "--dtype=float16",
             "--chunked-prefill-size",
             "1024",
             "--attention-backend",

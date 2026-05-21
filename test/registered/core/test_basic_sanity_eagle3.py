@@ -47,11 +47,8 @@ class TestBasicSanityEagle3(
             cls.base_url,
             timeout=DEFAULT_TIMEOUT_FOR_SERVER_LAUNCH,
             other_args=[
-                # Canonical EAGLE3 sglang config: fp16 + triton attention.
-                # bf16 + flashinfer cutlass RMSNorm hits a SM120 dtype
-                # mismatch on the draft model's input_layernorm.
-                "--dtype",
-                "float16",
+                # Leave --dtype at auto so EAGLE3 target/draft dtype policy is
+                # covered by this sanity path.
                 "--attention-backend",
                 "triton",
                 "--speculative-algorithm",
