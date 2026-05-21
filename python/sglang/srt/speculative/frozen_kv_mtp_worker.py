@@ -43,6 +43,7 @@ from sglang.srt.model_executor.pool_configurator import MemoryPoolConfig
 from sglang.srt.observability.req_time_stats import set_time_batch
 from sglang.srt.observability.trace import get_global_tracing_enabled
 from sglang.srt.server_args import ServerArgs
+from sglang.srt.speculative.dtype_policy import build_speculative_dtype_policy
 from sglang.srt.speculative.eagle_utils import (
     build_tree_kernel_efficient,
     organize_draft_results,
@@ -152,6 +153,15 @@ class FrozenKVMTPWorker(TpModelWorker):
                 token_to_kv_pool_allocator=self.token_to_kv_pool_allocator,
                 memory_pool_config=draft_pool_config,
             )
+
+        self.speculative_dtype_policy = build_speculative_dtype_policy(
+            target_dtype=target_worker.model_runner.model_config.dtype,
+            draft_dtype=self.draft_model_runner.model_config.dtype,
+            logger=logger,
+            algorithm=getattr(
+                self.speculative_algorithm, "name", str(self.speculative_algorithm)
+            ),
+        )
 
         embed, head = self.target_worker.model_runner.model.get_embed_and_head()
         if hasattr(self.draft_model_runner.model, "set_embed_and_head"):
@@ -360,7 +370,7 @@ class FrozenKVMTPWorker(TpModelWorker):
             batch.spec_info = FrozenKVMTPDraftInput.create_idle_input(
                 device=batch.device,
                 hidden_size=self._recurrent_hidden_size,
-                dtype=self.model_config.dtype,
+                dtype=self.speculative_dtype_policy.draft_hidden_dtype,
                 topk=self.topk,
                 capture_hidden_mode=CaptureHiddenMode.LAST,
             )
@@ -370,7 +380,11 @@ class FrozenKVMTPWorker(TpModelWorker):
             draft_input = FrozenKVMTPDraftInput()
 
         draft_input.bonus_tokens = last_token_ids.to(torch.int64)
-        draft_input.hidden_states = last_hidden_states
+        draft_input.hidden_states = (
+            self.speculative_dtype_policy.prepare_target_hidden_for_draft(
+                last_hidden_states
+            )
+        )
         draft_input.capture_hidden_mode = CaptureHiddenMode.LAST
         draft_input.num_tokens_per_req = 1
         draft_input.num_tokens_for_logprob_per_req = 1
@@ -527,7 +541,7 @@ class FrozenKVMTPWorker(TpModelWorker):
             batch.spec_info = FrozenKVMTPDraftInput.create_idle_input(
                 device=self.device,
                 hidden_size=self._recurrent_hidden_size,
-                dtype=self.model_config.dtype,
+                dtype=self.speculative_dtype_policy.draft_hidden_dtype,
                 topk=self.topk,
                 capture_hidden_mode=CaptureHiddenMode.LAST,
             )

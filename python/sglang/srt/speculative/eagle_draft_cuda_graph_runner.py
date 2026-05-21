@@ -57,6 +57,11 @@ class EagleDraftInputBuffers(ForwardInputBuffers):
     global_num_tokens_gpu: Optional[torch.Tensor]
     global_num_tokens_for_logprob_gpu: Optional[torch.Tensor]
 
+    def _share_buffer_key(self, name: str) -> str:
+        if name == "hidden_states":
+            return "eagle_draft.hidden_states"
+        return name
+
 
 class EAGLEDraftCudaGraphRunner:
     def __init__(

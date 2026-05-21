@@ -82,6 +82,11 @@ class MultiLayerEagleDraftExtendInputBuffers(ForwardInputBuffers):
     global_num_tokens_gpu: Optional[torch.Tensor]
     global_num_tokens_for_logprob_gpu: Optional[torch.Tensor]
 
+    def _share_buffer_key(self, name: str) -> str:
+        if name == "hidden_states":
+            return "multi_layer_eagle_draft_extend.hidden_states"
+        return name
+
 
 class MultiLayerEagleDraftExtendCudaGraphRunner:
     def __init__(self, eagle_worker: MultiLayerEagleDraftWorker, step: int):

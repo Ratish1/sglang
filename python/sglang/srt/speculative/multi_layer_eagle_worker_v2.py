@@ -35,6 +35,7 @@ from sglang.srt.model_executor.forward_batch_info import (
 from sglang.srt.server_args import ServerArgs
 from sglang.srt.speculative.base_spec_worker import BaseDraftWorker, BaseSpecWorker
 from sglang.srt.speculative.draft_utils import DraftBackendFactory
+from sglang.srt.speculative.dtype_policy import build_speculative_dtype_policy
 from sglang.srt.speculative.eagle_info import EagleDraftInput, EagleVerifyInput
 from sglang.srt.speculative.eagle_info_v2 import fill_bonus_tokens
 from sglang.srt.speculative.eagle_utils import TreeMaskMode, build_tree_kernel_efficient
@@ -146,6 +147,15 @@ class MultiLayerEagleDraftWorker(BaseDraftWorker):
         # Match `EagleDraftWorker.draft_runner` so `_draft_runner_of(self)` works
         # for the EagleDraftInput shape classmethods.
         self.draft_runner: ModelRunner = self.draft_runner_list[0]
+        self.speculative_dtype_policy = build_speculative_dtype_policy(
+            target_dtype=target_worker.model_runner.model_config.dtype,
+            draft_dtype=self.draft_runner.model_config.dtype,
+            logger=logger,
+            algorithm=getattr(
+                self.speculative_algorithm, "name", str(self.speculative_algorithm)
+            ),
+            cast_target_hidden_states=not self.speculative_algorithm.is_standalone(),
+        )
 
         # Chain-style MTP: each step propagates its own output hidden states to the
         # next step.  Non-chain: each step uses the target model's hidden states.
@@ -162,7 +172,7 @@ class MultiLayerEagleDraftWorker(BaseDraftWorker):
                 self.speculative_num_steps - 1,
                 self.model_config.hidden_size,
             ),
-            dtype=self.model_config.dtype,
+            dtype=self.speculative_dtype_policy.draft_hidden_dtype,
             device=self.device,
         )
 
@@ -380,6 +390,11 @@ class MultiLayerEagleDraftWorker(BaseDraftWorker):
             target_hidden_states: Hidden states from the target model forward
             next_token_ids: Next token ids generated from the target forward.
         """
+        target_hidden_states = (
+            self.speculative_dtype_policy.prepare_target_hidden_for_draft(
+                target_hidden_states
+            )
+        )
         # Construct spec_info
         next_draft_input = EagleDraftInput(
             hidden_states=target_hidden_states,
@@ -468,9 +483,12 @@ class MultiLayerEagleDraftWorker(BaseDraftWorker):
     def _draft_extend_for_decode(
         self, batch: ScheduleBatch, batch_result: GenerationBatchResult
     ):
+        hidden_states = self.speculative_dtype_policy.prepare_target_hidden_for_draft(
+            batch_result.logits_output.hidden_states
+        )
         # Batch 2: Draft extend
         draft_input = EagleDraftInput(
-            hidden_states=batch_result.logits_output.hidden_states,
+            hidden_states=hidden_states,
             num_tokens_per_req=self.speculative_num_steps + 1,
             num_tokens_for_logprob_per_req=1,
         )

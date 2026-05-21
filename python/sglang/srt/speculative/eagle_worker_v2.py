@@ -40,6 +40,7 @@ from sglang.srt.speculative.adaptive_runtime_state import (
 )
 from sglang.srt.speculative.base_spec_worker import BaseDraftWorker, BaseSpecWorker
 from sglang.srt.speculative.draft_utils import DraftBackendFactory
+from sglang.srt.speculative.dtype_policy import build_speculative_dtype_policy
 from sglang.srt.speculative.eagle_draft_cuda_graph_runner import (
     EAGLEDraftCudaGraphRunner,
 )
@@ -168,6 +169,15 @@ class EagleDraftWorker(BaseDraftWorker):
 
         # Alias for better readability
         self.draft_runner = self.draft_worker.model_runner
+        self.speculative_dtype_policy = build_speculative_dtype_policy(
+            target_dtype=target_worker.model_runner.model_config.dtype,
+            draft_dtype=self.draft_runner.model_config.dtype,
+            logger=logger,
+            algorithm=getattr(
+                self.speculative_algorithm, "name", str(self.speculative_algorithm)
+            ),
+            cast_target_hidden_states=not self.speculative_algorithm.is_standalone(),
+        )
         self.eagle_use_aux_hidden_state = False
         if self.speculative_algorithm.is_eagle3():
             eagle_config = getattr(
@@ -533,6 +543,11 @@ class EagleDraftWorker(BaseDraftWorker):
             target_hidden_states: Hidden states from the target model forward
             next_token_ids: Next token ids generated from the target forward.
         """
+        target_hidden_states = (
+            self.speculative_dtype_policy.prepare_target_hidden_for_draft(
+                target_hidden_states
+            )
+        )
         # Construct input_ids
         if not batch.forward_mode.is_idle():
             pt = 0
@@ -582,9 +597,12 @@ class EagleDraftWorker(BaseDraftWorker):
     def _draft_extend_for_decode(
         self, batch: ScheduleBatch, batch_result: GenerationBatchResult
     ):
+        hidden_states = self.speculative_dtype_policy.prepare_target_hidden_for_draft(
+            batch_result.logits_output.hidden_states
+        )
         # Batch 2: Draft extend
         draft_input = EagleDraftInput(
-            hidden_states=batch_result.logits_output.hidden_states,
+            hidden_states=hidden_states,
             num_tokens_per_req=self.speculative_num_steps + 1,
             num_tokens_for_logprob_per_req=self.speculative_num_steps + 1,
         )

@@ -721,6 +721,10 @@ class EagleDraftInput(SpecInput, EagleDraftInputV2Mixin):
     def dtype_for(cls, worker) -> Optional[torch.dtype]:
         if worker.speculative_algorithm.is_standalone():
             return None
+        # Decode hidden states are produced and consumed by the draft model.
+        dtype_policy = getattr(worker, "speculative_dtype_policy", None)
+        if dtype_policy is not None:
+            return dtype_policy.draft_hidden_dtype
         return _draft_runner_of(worker).model_config.dtype
 
     @classmethod
@@ -887,7 +891,12 @@ class EagleDraftExtendInput(SpecInput):
     def dtype_for(cls, worker) -> Optional[torch.dtype]:
         if worker.speculative_algorithm.is_standalone():
             return None
-        return worker.target_worker.model_runner.model_config.dtype
+        # Extend hidden states keep the target width but are cast before the
+        # draft forward, so graph buffers should use draft dtype.
+        dtype_policy = getattr(worker, "speculative_dtype_policy", None)
+        if dtype_policy is not None:
+            return dtype_policy.draft_hidden_dtype
+        return _draft_runner_of(worker).model_config.dtype
 
     @classmethod
     def create_idle_input(

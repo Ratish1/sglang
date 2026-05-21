@@ -14,6 +14,9 @@ _forward_input_buffer_pool: Dict[str, torch.Tensor] = {}
 @dataclass
 class ForwardInputBuffers:
 
+    def _share_buffer_key(self, name: str) -> str:
+        return name
+
     def _share_one_buffer(self, name: str, new_buffer: torch.Tensor) -> torch.Tensor:
 
         buffer_size = new_buffer.size()
@@ -54,12 +57,14 @@ class ForwardInputBuffers:
                         sub_buffer, torch.Tensor
                     ), f"Field {name}.{sub_name} is expected to be a torch.Tensor, but got {type(sub_buffer)}."
                     new_buffer = self._share_one_buffer(
-                        f"{name}.{sub_name}", sub_buffer
+                        self._share_buffer_key(f"{name}.{sub_name}"), sub_buffer
                     )
                     buffer[sub_name] = new_buffer
             else:
                 assert isinstance(
                     buffer, torch.Tensor
                 ), f"Field {name} is expected to be a torch.Tensor, a dict of torch.Tensor, or a dataclass of torch.Tensor, but got {type(buffer)}."
-                new_buffer = self._share_one_buffer(name, buffer)
+                new_buffer = self._share_one_buffer(
+                    self._share_buffer_key(name), buffer
+                )
                 setattr(self, name, new_buffer)

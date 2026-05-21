@@ -38,6 +38,7 @@ from sglang.srt.speculative.adaptive_runtime_state import (
     SpecRuntimeState,
 )
 from sglang.srt.speculative.draft_utils import DraftBackendFactory
+from sglang.srt.speculative.dtype_policy import build_speculative_dtype_policy
 from sglang.srt.speculative.eagle_draft_cuda_graph_runner import (
     EAGLEDraftCudaGraphRunner,
 )
@@ -173,6 +174,16 @@ class EAGLEWorker(TpModelWorker):
                 token_to_kv_pool_allocator=self.token_to_kv_pool_allocator,
                 memory_pool_config=target_worker.model_runner.memory_pool_config,
             )
+
+        self.speculative_dtype_policy = build_speculative_dtype_policy(
+            target_dtype=target_worker.model_runner.model_config.dtype,
+            draft_dtype=self.draft_model_runner.model_config.dtype,
+            logger=logger,
+            algorithm=getattr(
+                self.speculative_algorithm, "name", str(self.speculative_algorithm)
+            ),
+            cast_target_hidden_states=not self.speculative_algorithm.is_standalone(),
+        )
 
         embed, head = self.target_worker.model_runner.model.get_embed_and_head()
 
@@ -1099,6 +1110,9 @@ class EAGLEWorker(TpModelWorker):
             hidden_states: Hidden states from the target model forward
             next_token_ids: Next token ids generated from the target forward.
         """
+        hidden_states = self.speculative_dtype_policy.prepare_target_hidden_for_draft(
+            hidden_states
+        )
         batch.spec_info = EagleDraftInput(
             hidden_states=hidden_states,
             bonus_tokens=next_token_ids,
@@ -1128,6 +1142,11 @@ class EAGLEWorker(TpModelWorker):
         self, batch: ScheduleBatch
     ) -> EagleDraftInput:
         draft_extend_input: EagleDraftExtendInput = batch.spec_info
+        draft_extend_input.hidden_states = (
+            self.speculative_dtype_policy.prepare_target_hidden_for_draft(
+                draft_extend_input.hidden_states
+            )
+        )
 
         # Backup fields that will be modified in-place
         seq_lens_backup = batch.seq_lens.clone()
