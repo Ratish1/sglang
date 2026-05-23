@@ -34,6 +34,10 @@ class TestSpeculativeDtypePolicy(unittest.TestCase):
         self.assertEqual(prepared.dtype, torch.float16)
         self.assertEqual(hidden_states.dtype, torch.bfloat16)
         logger.warning.assert_called_once()
+        self.assertIn(
+            "casting target hidden states from torch.bfloat16 to torch.float16",
+            logger.warning.call_args.args[0],
+        )
 
     def test_cast_logs_when_actual_hidden_dtype_differs_from_config(self):
         logger = MagicMock()

@@ -51,9 +51,8 @@ class SpeculativeDtypePolicy:
             return
         self._cast_warning_emitted = True
         self.logger.warning(
-            f"Speculative decoding dtype mismatch for {self.algorithm}: target "
-            f"hidden states are {source_dtype}, draft activations are "
-            f"{self.draft_hidden_dtype}. Runtime will cast target hidden states "
+            f"Speculative decoding dtype mismatch for {self.algorithm}: casting "
+            f"target hidden states from {source_dtype} to {self.draft_hidden_dtype} "
             "before draft forward."
         )
 
