@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import concurrent.futures
 import dataclasses
+import gc
 import logging
 import os
 import struct
 import threading
 import time
 from collections import defaultdict
+from contextlib import contextmanager
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -55,6 +57,38 @@ from sglang.srt.server_args import ServerArgs
 from sglang.srt.utils.network import NetworkAddress
 
 logger = logging.getLogger(__name__)
+
+
+class _TransferGCGuard:
+    """Process-wide GC suspension for Mooncake transfer critical sections."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._depth = 0
+        self._restore_enabled = False
+
+    @contextmanager
+    def suspend(self):
+        if not envs.SGLANG_MOONCAKE_DISABLE_GC_DURING_TRANSFER.get():
+            yield
+            return
+
+        with self._lock:
+            if self._depth == 0:
+                self._restore_enabled = gc.isenabled()
+                if self._restore_enabled:
+                    gc.disable()
+            self._depth += 1
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._depth -= 1
+                if self._depth == 0 and self._restore_enabled:
+                    gc.enable()
+
+
+_transfer_gc_guard = _TransferGCGuard()
 
 FAILED_SESSION_RECOVERIES = Counter(
     "sglang:failed_session_recoveries_total",
@@ -566,10 +600,11 @@ class MooncakeKVManager(CommonKVManager):
         if not transfer_blocks:
             return 0
 
-        src_addrs, dst_addrs, lengths = zip(*transfer_blocks)
-        return self.engine.batch_transfer_sync(
-            mooncake_session_id, list(src_addrs), list(dst_addrs), list(lengths)
-        )
+        with _transfer_gc_guard.suspend():
+            src_addrs, dst_addrs, lengths = zip(*transfer_blocks)
+            return self.engine.batch_transfer_sync(
+                mooncake_session_id, list(src_addrs), list(dst_addrs), list(lengths)
+            )
 
     def _send_kvcache_generic(
         self,
@@ -785,21 +820,26 @@ class MooncakeKVManager(CommonKVManager):
         )
 
         def process_layer_tp_aware(src_layer_ptr, dst_layer_ptr):
-            src_page_base_addrs = src_layer_ptr + prefill_page_indices * src_kv_item_len
-            dst_page_base_addrs = dst_layer_ptr + decode_page_indices * dst_kv_item_len
-            src_slice_addrs = src_page_base_addrs + src_token_slot_offsets
-            dst_slice_addrs = dst_page_base_addrs + dst_token_slot_offsets
+            with _transfer_gc_guard.suspend():
+                src_page_base_addrs = (
+                    src_layer_ptr + prefill_page_indices * src_kv_item_len
+                )
+                dst_page_base_addrs = (
+                    dst_layer_ptr + decode_page_indices * dst_kv_item_len
+                )
+                src_slice_addrs = src_page_base_addrs + src_token_slot_offsets
+                dst_slice_addrs = dst_page_base_addrs + dst_token_slot_offsets
 
-            src_addr_list = src_slice_addrs.reshape(-1).tolist()
-            if not src_addr_list:
-                # Nothing to transfer for this layer.
-                return 0
-            dst_addr_list = dst_slice_addrs.reshape(-1).tolist()
-            total_slices = len(src_addr_list)
-            length_list = [heads_bytes_per_token_to_send] * total_slices
-            return self.engine.batch_transfer_sync(
-                mooncake_session_id, src_addr_list, dst_addr_list, length_list
-            )
+                src_addr_list = src_slice_addrs.reshape(-1).tolist()
+                if not src_addr_list:
+                    # Nothing to transfer for this layer.
+                    return 0
+                dst_addr_list = dst_slice_addrs.reshape(-1).tolist()
+                total_slices = len(src_addr_list)
+                length_list = [heads_bytes_per_token_to_send] * total_slices
+                return self.engine.batch_transfer_sync(
+                    mooncake_session_id, src_addr_list, dst_addr_list, length_list
+                )
 
         futures = []
         for i in range(layers_current_pp_stage):
