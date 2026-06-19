@@ -346,7 +346,7 @@ def _can_use_triton(q: torch.Tensor) -> bool:
 
 
 def _fill_metadata(
-    offset: torch.Tensor,
+    cache_pos: torch.Tensor,
     workspace: LocalCausalVarlenWorkspace,
     *,
     batch_size: int,
@@ -356,7 +356,9 @@ def _fill_metadata(
     workspace.cu_q[: batch_size + 1].copy_(
         workspace.batch_arange[: batch_size + 1] * chunk_len
     )
-    cached_lens = torch.clamp(offset[:batch_size], min=0, max=context).to(torch.int32)
+    cached_lens = torch.count_nonzero(cache_pos[:batch_size] >= 0, dim=1).to(
+        torch.int32
+    )
     workspace.k_lens[:batch_size].copy_(cached_lens + chunk_len)
     workspace.cu_k[0].zero_()
     workspace.cu_k[1 : batch_size + 1].copy_(
@@ -531,7 +533,7 @@ def local_causal_varlen_attention_with_cache(
 
     if use_triton:
         _fill_metadata(
-            offset,
+            cache_pos,
             workspace,
             batch_size=batch_size,
             chunk_len=chunk_len,
