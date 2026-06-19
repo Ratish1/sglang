@@ -539,7 +539,6 @@ def local_causal_varlen_attention_with_cache(
             chunk_len=chunk_len,
             context=context,
         )
-        max_k = context + chunk_len
         block_size = 256
         _pack_q_kernel[(triton.cdiv(total_q * num_heads * head_dim, block_size),)](
             q,
@@ -580,8 +579,10 @@ def local_causal_varlen_attention_with_cache(
             head_dim,
             block_size,
         )
-        k_pack = workspace.k_pack[:total_k_capacity]
-        v_pack = workspace.v_pack[:total_k_capacity]
+        total_k = int(workspace.cu_k[batch_size].item())
+        max_k = int(workspace.k_lens[:batch_size].max().item())
+        k_pack = workspace.k_pack[:total_k]
+        v_pack = workspace.v_pack[:total_k]
     else:
         total_k, max_k = _pack_python(
             q,
