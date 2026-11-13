@@ -841,11 +841,21 @@ def top_k_top_p_min_p_sampling_from_probs_torch(
         # apply log to get logprobs. Therefore, we cannot use log_softmax directly.
         # For now, we use log to the modified probs to get logprobs, but for numerical
         # stability, we'd better come up with a solution to use log_softmax.
-        logprobs = probs_sort.to(torch.float64, copy=return_filtered_probs)
-        if not return_filtered_probs:
-            del probs_sort
+        # note (ratish): key seeded noise by token identity so sorting does not reassign it.
+        token_weights = torch.zeros_like(probs_sort).scatter_(1, probs_idx, probs_sort)
+        logprobs = token_weights.to(torch.float64, copy=return_filtered_probs)
         logprobs.log_()
-        sampled_index = multinomial_with_seed(logprobs, sampling_seed, positions)
+        sampled_token_ids = multinomial_with_seed(logprobs, sampling_seed, positions)
+        if return_filtered_probs:
+            selected_weight = torch.gather(token_weights, 1, sampled_token_ids).view(-1)
+            return (
+                sampled_token_ids.view(-1).to(torch.int32),
+                probs_sort,
+                probs_idx.to(torch.int32),
+                selected_weight,
+            )
+        else:
+            return sampled_token_ids.view(-1).to(torch.int32)
 
     if return_filtered_probs:
         selected_weight = torch.gather(probs_sort, 1, sampled_index).view(-1)
