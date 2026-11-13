@@ -628,6 +628,7 @@ def fused_moe_kernel(
         accumulator += bias
 
     if MUL_ROUTED_WEIGHT:
+        accumulator = accumulator.to(compute_type).to(tl.float32)
         moe_weight = tl.load(topk_weights_ptr + offs_token, mask=token_mask, other=0)
         accumulator *= moe_weight[:, None]
 
